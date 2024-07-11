@@ -39,7 +39,7 @@ if (isset($update)) {
 }
 
 function convertCurrency($amount, $from_currency, $to_currency) {
-    $apiKey = 'YOUR_API_KEY_HERE'; // Bu yerga exchangerate-api.com API kalitini kiriting
+    $apiKey = ''; 
     $client = new Client();
     $response = $client->get("https://v6.exchangerate-api.com/v6/$apiKey/latest/$from_currency");
     $data = json_decode($response->getBody(), true);
