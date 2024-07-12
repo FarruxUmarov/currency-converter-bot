@@ -2,68 +2,84 @@
 
 require 'vendor/autoload.php';
 
+require 'Currency.php';
+
+require 'DB.php';
+
 use GuzzleHttp\Client;
 
+class TelegramBot
+{
+    private $token;
+    private $tgApi;
+    private $client;
+    private $update;
+
+    public function __construct($token)
+    {
+        $this->token = $token;
+        $this->tgApi = "https://api.telegram.org/bot{$token}/";
+        $this->client = new Client(['base_uri' => $this->tgApi]);
+        $this->update = json_decode(file_get_contents('php://input'));
+    }
+
+    public function handleRequest()
+    {
+        if (isset($this->update) && isset($this->update->message)) {
+            $message = $this->update->message;
+            $chat_id = $message->chat->id;
+            $text = $message->text;
+
+            if (!empty($text)) {
+                $responseText = $this->processMessage($text);
+                $this->sendMessage($chat_id, $responseText);
+            } else {
+                error_log("Xabar matni bo'sh.");
+            }
+        } else {
+            error_log("Update yoki xabar mavjud emas.");
+        }
+    }
+
+    private function processMessage($text)
+    {
+        if (strpos($text, "/convert") === 0) {
+            $params = explode(" ", $text);
+            if (count($params) == 4) {
+                $amount = $params[1];
+                $from_currency = strtoupper($params[2]);
+                $to_currency = strtoupper($params[3]);
+
+                require_once "Currency.php";
+
+                $currencyConverter = new Currency();
+                $converted = $currencyConverter->exchange((float)$amount, $from_currency, $to_currency);
+
+                if ($converted !== null) {
+                    return "Konvertatsiya natijasi: $amount $from_currency = $converted $to_currency";
+                } else {
+                    return "Valyuta kursini olishda xatolik yuz berdi.";
+                }
+            } else {
+                return "Noto'g'ri format. To'g'ri format: /convert <miqdor> <from_valyuta> <to_valyuta>";
+            }
+        } else {
+            return "Salom! Men valyuta konvertatsiyasi qilish uchun mo'ljallanganman. /convert buyrug'ini ishlatib valyutalarni konvertatsiya qiling.";
+        }
+    }
+
+    private function sendMessage($chat_id, $text)
+    {
+        $this->client->post('sendMessage', [
+            'form_params' => [
+                'chat_id' => $chat_id,
+                'text' => $text
+            ]
+        ]);
+    }
+}
+
 $token = "6038247949:AAEAkQNMwsFUynBu-wxOhPEaGgSrbDELp0w";
-$tgApi = "https://api.telegram.org/bot$token/";
+$bot = new TelegramBot($token);
+$bot->handleRequest();
 
-$client = new Client(['base_uri' => $tgApi]);
-
-$update = json_decode(file_get_contents('php://input'));
-
-if (isset($update)) {
-    if (isset($update->message)) {
-        $message = $update->message;
-        $chat_id = $message->chat->id ?? null;
-        $type = $message->chat->type ?? null;
-        $miid = $message->message_id ?? null;
-        $name = $message->from->first_name ?? null;
-        $user = $message->from->username ?? '';
-        $fromid = $message->from->id ?? null;
-        $text = $message->text ?? null;
-        $title = $message->chat->title ?? null;
-        $chatuser = $message->chat->username ?? null;
-        $chatuser = $chatuser ? $chatuser : "Shaxsiy Guruh!";
-        $caption = $message->caption ?? null;
-        $entities = $message->entities[0] ?? null;
-        $left_chat_member = $message->left_chat_member ?? null;
-        $new_chat_member = $message->new_chat_member ?? null;
-        $photo = $message->photo ?? null;
-        $video = $message->video ?? null;
-        $audio = $message->audio ?? null;
-        $voice = $message->voice ?? null;
-        $reply = $message->reply_markup ?? null;
-        $fchat_id = $message->forward_from_chat->id ?? null;
-        $fid = $message->forward_from_message_id ?? null;
-    }
-}
-
-function convertCurrency($amount, $from_currency, $to_currency) {
-    $apiKey = ''; 
-    $client = new Client();
-    $response = $client->get("https://v6.exchangerate-api.com/v6/$apiKey/latest/$from_currency");
-    $data = json_decode($response->getBody(), true);
-    $rate = $data['conversion_rates'][$to_currency];
-    return $amount * $rate;
-}
-
-if (isset($chat_id)) {
-    if (preg_match('/(\d+)\s*(uzs|usd)\s*->\s*(uzs|usd)/i', $text, $matches)) {
-        $amount = $matches[1];
-        $from_currency = strtoupper($matches[2]);
-        $to_currency = strtoupper($matches[3]);
-        $converted_amount = convertCurrency($amount, $from_currency, $to_currency);
-        $response_text = "$amount $from_currency = $converted_amount $to_currency";
-    } else {
-        $response_text = 'Iltimos, miqdorni va valyutalarni to\'g\'ri formatda kiriting, masalan: 1000 UZS -> USD yoki 10 USD -> UZS';
-    }
-
-    $client->post('sendMessage', [
-        'form_params' => [
-            'chat_id' => $chat_id,
-            'text' => $response_text
-        ]
-    ]);
-} else {
-    error_log('chat_id is not set');
-}
